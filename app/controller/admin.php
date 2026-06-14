@@ -164,7 +164,7 @@ class AdminController extends BaseController {
     }
 
     /**
-	 * Handles URL: /admin/social/post
+	 * Handles URL: /admin/social/post/{platform}
 	 * 
 	 * @param Asatru\Controller\ControllerArg $request
 	 * @return Asatru\View\JsonHandler
@@ -172,7 +172,9 @@ class AdminController extends BaseController {
     public function social_post($request)
     {
         try {
-            SocialModel::publishPost();
+            $platform = $request->arg('platform');
+
+            SocialModel::publishPost($platform);
 
             return json([
                 'code' => 200

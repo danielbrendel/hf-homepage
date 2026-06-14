@@ -34,7 +34,8 @@
             $this->database->add('id INT NOT NULL AUTO_INCREMENT PRIMARY KEY');
             $this->database->add('content TEXT NOT NULL');
             $this->database->add('asset VARCHAR(512) NULL');
-            $this->database->add('posted BOOLEAN NOT NULL DEFAULT 0');
+            $this->database->add('mastodon BOOLEAN NOT NULL DEFAULT 0');
+            $this->database->add('bluesky BOOLEAN NOT NULL DEFAULT 0');
             $this->database->add('updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
             $this->database->add('created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
             $this->database->create();

@@ -5,6 +5,7 @@
  */ 
 class SocialModel extends \Asatru\Database\Model {
     const FILE_IDENT = 'asset';
+    const SOCIALS = ['mastodon', 'bluesky'];
 
     /**
      * @param $content
@@ -37,30 +38,52 @@ class SocialModel extends \Asatru\Database\Model {
     }
 
     /**
+     * @param $platform
      * @return void
      * @throws \Exception
      */
-    public static function publishPost()
+    public static function publishPost($platform)
+    {
+        try {
+            if (!in_array($platform, self::SOCIALS)) {
+                throw new \Exception('Unsupported social network: ' . print_r($platform, true));
+            }
+
+            $item = static::raw('SELECT * FROM `@THIS` WHERE ' . $platform . ' = 0 ORDER BY id ASC LIMIT 1')->first();
+            if (!$item) {
+                return;
+            }
+
+            static::$platform($item->get('content'), (($item->get('asset')) ? public_path() . '/img/social/' . $item->get('asset') : null));
+
+            static::raw('UPDATE `@THIS` SET ' . $platform . ' = 1 WHERE id = ?', [$item->get('id')]);
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
+
+    /**
+     * @param $content
+     * @param $asset
+     * @return void
+     * @throws \Exception
+     */
+    public static function mastodon($content, $asset = null)
     {
         try {
             $server_instance = env('MASTODON_SERVER_INSTANCE');
             $access_token = env('MASTODON_ACCESS_TOKEN');
 
-            $item = static::raw('SELECT * FROM `@THIS` WHERE posted = 0 ORDER BY id ASC LIMIT 1')->first();
-            if (!$item) {
-                return;
-            }
-
             $media_id = null;
 
-            if (($item->get('asset')) && (is_file(public_path() . '/img/social/' . $item->get('asset')))) {
+            if (($asset) && (is_file($asset))) {
                 $response = NetUtilsModule::remoteRequest($server_instance . '/api/v2/media', [
                     'header' => [
                         'Authorization: Bearer ' . $access_token,
                         'Content-Type: multipart/form-data'
                     ],
                     'post' => [
-                        'file' => new \CURLFile(public_path() . '/img/social/' . $item->get('asset'))
+                        'file' => new \CURLFile($asset)
                     ]
                 ]);
                 
@@ -73,7 +96,7 @@ class SocialModel extends \Asatru\Database\Model {
             }
 
             $post_data = [
-                'status' => $item->get('content'),
+                'status' => $content,
                 'visibility' => 'public'
             ];
 
@@ -93,8 +116,133 @@ class SocialModel extends \Asatru\Database\Model {
             if (isset($status_json->error)) {
                 throw new \Exception('[api/v1/statuses] ' . $status_json->error, $response['info']['http_code']);
             }
+        } catch (\Exception $e) {
+            throw $e;
+        }
+    }
 
-            static::raw('UPDATE `@THIS` SET posted = 1 WHERE id = ?', [$item->get('id')]);
+    /**
+     * @param $content
+     * @param $asset
+     * @return void
+     * @throws \Exception
+     */
+    public static function bluesky($content, $asset = null)
+    {
+        try {
+            $instance = env('BLUESKY_INSTANCE');
+            $handle = env('BLUESKY_HANDLE');
+            $password = env('BLUESKY_PASSWORD');
+
+            $tags = null;
+            $tagfacets = [];
+            $facets = [];
+            $embed = null;
+
+            $response = NetUtilsModule::remoteRequest($instance . '/xrpc/com.atproto.server.createSession', [
+                'header' => [
+                    'Content-Type: application/json'
+                ],
+                'post' => json_encode([
+                    'identifier' => $handle,
+                    'password' => $password
+                ])
+            ]);
+            
+            $session = json_decode($response['data']);
+            
+            if ((!isset($session->accessJwt)) || (!isset($session->did))) {
+                throw new \Exception('accessJwt or did are missing: ' . print_r($response, true));
+            }
+
+            preg_match_all('/#(\w+)/', $content, $tags);
+
+            if (count($tags[1]) > 0) {
+                foreach ($tags[1] as $tag) {
+                    $tagstart = strpos($content, '#' . $tag);
+    
+                    $tagfacets[] = [
+                        'index' => [
+                            'byteStart' => (int)$tagstart,
+                            'byteEnd' => $tagstart + strlen($tag) + 1
+                        ],
+                        'features' => [
+                            [
+                                '$type' => 'app.bsky.richtext.facet#tag',
+                                'tag' => $tag
+                            ]
+                        ]
+                    ];
+                }
+
+                $facets = array_merge($facets, $tagfacets);
+            }
+
+            if (($asset) && (is_file($asset))) {
+                $response = NetUtilsModule::remoteRequest($instance . '/xrpc/com.atproto.repo.uploadBlob', [
+                    'header' => [
+                        'Authorization: Bearer ' . $session->accessJwt,
+                        'Content-Type: ' . mime_content_type($asset)
+                    ],
+                    'post' => file_get_contents($asset)
+                ]);
+                
+                if (!isset($response['data'])) {
+                    throw new \Exception('Failed to upload file: ' . print_r($response, true));
+                }
+
+                $blob = json_decode($response['data'], true);
+                list($width, $height) = getimagesize($asset);
+
+                $embed = [
+                    '$type'  => 'app.bsky.embed.images',
+                    'images' => [
+                        [
+                            'alt'   => 'N/A',
+                            'image' => $blob['blob'],
+                            'aspectRatio' => [
+                                'width' => $width,
+                                'height' => $height
+                            ]
+                        ]
+                    ]
+                ];
+            }
+
+            $record = [
+                '$type' => 'app.bsky.feed.post',
+                'text' => $content,
+                'createdAt' => gmdate("Y-m-d\TH:i:s\Z"),
+            ];
+
+            if ((is_array($facets)) && (count($facets) > 0)) {
+                $record['facets'] = $facets;
+            }
+
+            if (($embed) && (is_array($embed))) {
+                $record['embed'] = $embed;
+            }
+            
+            $response = NetUtilsModule::remoteRequest($instance . '/xrpc/com.atproto.repo.createRecord', [
+                'header' => [
+                    'Authorization: Bearer ' . $session->accessJwt,
+                    'Content-Type: application/json'
+                ],
+                'post' => json_encode([
+                    'repo' => $session->did,
+                    'collection' => 'app.bsky.feed.post',
+                    'record' => $record
+                ])
+            ]);
+
+            if (!isset($response['data'])) {
+                throw new \Exception('Request failed: ' . print_r($response, true));
+            }
+
+            $status_json = json_decode($response['data']);
+            if (isset($status_json->error)) {
+                throw new \Exception('Erroneous request: ' . $status_json->error, $response['info']['http_code']);
+            }
         } catch (\Exception $e) {
             throw $e;
         }
