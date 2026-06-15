@@ -90,10 +90,14 @@ class IndexController extends BaseController {
 	 * Handles URL: /videos
 	 * 
 	 * @param Asatru\Controller\ControllerArg $request
-	 * @return Asatru\View\ViewHandler
+	 * @return Asatru\View\ViewHandler|Asatru\View\RedirectHandler
 	 */
 	public function videos($request)
 	{
+		if (!env('APP_ENABLE_VIDEO_SECTION')) {
+			return redirect('/');
+		}
+
 		$categories = TutorialsModel::getCategories();
 		$videos = TutorialsModel::getAll();
 		

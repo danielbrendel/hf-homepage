@@ -14,10 +14,13 @@ class SitemapModule {
             $sitemap = [
                 '/',
                 '/screenshots',
-                '/videos',
                 '/faq',
                 '/themes'
             ];
+
+            if (env('APP_ENABLE_VIDEO_SECTION')) {
+                $sitemap[] = '/videos';
+            }
 
             if (env('APP_ENABLE_PHOTO_SHARE')) {
                 $sitemap[] = '/community';

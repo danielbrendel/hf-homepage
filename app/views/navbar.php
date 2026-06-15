@@ -57,9 +57,11 @@
                 Documentation
             </a>
 
+            @if (env('APP_ENABLE_VIDEO_SECTION'))
             <a class="navbar-item navbar-item-padding" href="{{ url('/videos') }}">
                 Videos
             </a>
+            @endif
 
             <a class="navbar-item navbar-item-padding" href="{{ url('/faq') }}">
                 FAQ
