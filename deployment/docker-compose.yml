@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  app:
+    image: ghcr.io/danielbrendel/hortusfox-web:latest
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - app_images:/var/www/html/public/img
+      - app_logs:/var/www/html/app/logs
+      - app_backup:/var/www/html/public/backup
+      - app_themes:/var/www/html/public/themes
+      - app_migrate:/var/www/html/app/migrations
+      - ./hortusfox-ssl.conf:/etc/apache2/sites-available/000-default.conf
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    environment:
+      APP_ADMIN_EMAIL: "${DEPLOY_APP_ADMIN_EMAIL}"
+      APP_ADMIN_PASSWORD: "${DEPLOY_APP_ADMIN_PASSWORD}"
+      APP_TIMEZONE: "${DEPLOY_APP_TIMEZONE}"
+      APP_UPDATEDEPS: "${DEPLOY_APP_UPDATEDEPS}"
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: hortusfox
+      DB_USERNAME: "${DEPLOY_DB_USERNAME}"
+      DB_PASSWORD: "${DEPLOY_DB_PASSWORD}"
+      DB_CHARSET: "utf8mb4"
+      SMTP_AUTH: 1
+      SMTP_FROMNAME: "${DEPLOY_SMTP_FROMNAME}"
+      SMTP_FROMADDRESS: "${DEPLOY_SMTP_FROMADDRESS}"
+      SMTP_HOST: "${DEPLOY_SMTP_HOST}"
+      SMTP_PORT: ${DEPLOY_SMTP_PORT}
+      SMTP_USERNAME: "${DEPLOY_SMTP_USERNAME}"
+      SMTP_PASSWORD: "${DEPLOY_SMTP_PASSWORD}"
+      SMTP_ENCRYPTION: "${DEPLOY_SMTP_ENCRYPTION}"
+    depends_on:
+      - db
+
+  db:
+    image: mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: "${DEPLOY_MARIADB_ROOT_PASSWORD}"
+      MARIADB_DATABASE: hortusfox
+      MARIADB_USER: "${DEPLOY_MARIADB_USER}"
+      MARIADB_PASSWORD: "${DEPLOY_MARIADB_PASSWORD}"
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
+  app_images:
+  app_logs:
+  app_backup:
+  app_themes:
+  app_migrate:
